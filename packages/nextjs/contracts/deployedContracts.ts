@@ -13,7 +13,7 @@ const deployedContracts = {
           type: "constructor",
           inputs: [
             {
-              name: "_clawdToken",
+              name: "_clawd",
               type: "address",
               internalType: "address",
             },
@@ -27,12 +27,17 @@ const deployedContracts = {
               type: "uint256",
               internalType: "uint256",
             },
+            {
+              name: "_owner",
+              type: "address",
+              internalType: "address",
+            },
           ],
           stateMutability: "nonpayable",
         },
         {
           type: "function",
-          name: "DEAD_ADDRESS",
+          name: "DEAD",
           inputs: [],
           outputs: [
             {
@@ -45,9 +50,28 @@ const deployedContracts = {
         },
         {
           type: "function",
+          name: "active",
+          inputs: [],
+          outputs: [
+            {
+              name: "",
+              type: "bool",
+              internalType: "bool",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
           name: "burn",
           inputs: [],
-          outputs: [],
+          outputs: [
+            {
+              name: "burnAmount",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
           stateMutability: "nonpayable",
         },
         {
@@ -59,19 +83,6 @@ const deployedContracts = {
               name: "",
               type: "uint256",
               internalType: "uint256",
-            },
-          ],
-          stateMutability: "view",
-        },
-        {
-          type: "function",
-          name: "burnsEnabled",
-          inputs: [],
-          outputs: [
-            {
-              name: "",
-              type: "bool",
-              internalType: "bool",
             },
           ],
           stateMutability: "view",
@@ -91,7 +102,7 @@ const deployedContracts = {
         },
         {
           type: "function",
-          name: "clawdToken",
+          name: "clawd",
           inputs: [],
           outputs: [
             {
@@ -117,7 +128,20 @@ const deployedContracts = {
         },
         {
           type: "function",
-          name: "lastBurnTimestamp",
+          name: "hourlyBurnRate",
+          inputs: [],
+          outputs: [
+            {
+              name: "",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "lastBurnTime",
           inputs: [],
           outputs: [
             {
@@ -143,7 +167,7 @@ const deployedContracts = {
         },
         {
           type: "function",
-          name: "pendingBurnAmount",
+          name: "pendingBurn",
           inputs: [],
           outputs: [
             {
@@ -189,7 +213,7 @@ const deployedContracts = {
         },
         {
           type: "function",
-          name: "timeUntilNextBurn",
+          name: "timeSinceLastBurn",
           inputs: [],
           outputs: [
             {
@@ -202,23 +226,10 @@ const deployedContracts = {
         },
         {
           type: "function",
-          name: "toggleBurns",
+          name: "toggle",
           inputs: [],
           outputs: [],
           stateMutability: "nonpayable",
-        },
-        {
-          type: "function",
-          name: "totalBurnCalls",
-          inputs: [],
-          outputs: [
-            {
-              name: "",
-              type: "uint256",
-              internalType: "uint256",
-            },
-          ],
-          stateMutability: "view",
         },
         {
           type: "function",
@@ -248,10 +259,10 @@ const deployedContracts = {
         },
         {
           type: "function",
-          name: "withdrawTokens",
+          name: "withdraw",
           inputs: [
             {
-              name: "_amount",
+              name: "amount",
               type: "uint256",
               internalType: "uint256",
             },
@@ -261,7 +272,20 @@ const deployedContracts = {
         },
         {
           type: "event",
-          name: "BurnExecuted",
+          name: "BurnRateUpdated",
+          inputs: [
+            {
+              name: "newRate",
+              type: "uint256",
+              indexed: false,
+              internalType: "uint256",
+            },
+          ],
+          anonymous: false,
+        },
+        {
+          type: "event",
+          name: "Burned",
           inputs: [
             {
               name: "caller",
@@ -276,48 +300,16 @@ const deployedContracts = {
               internalType: "uint256",
             },
             {
-              name: "callerReward",
+              name: "reward",
               type: "uint256",
               indexed: false,
               internalType: "uint256",
             },
             {
-              name: "timestamp",
+              name: "elapsed",
               type: "uint256",
               indexed: false,
               internalType: "uint256",
-            },
-          ],
-          anonymous: false,
-        },
-        {
-          type: "event",
-          name: "BurnRateUpdated",
-          inputs: [
-            {
-              name: "oldRate",
-              type: "uint256",
-              indexed: false,
-              internalType: "uint256",
-            },
-            {
-              name: "newRate",
-              type: "uint256",
-              indexed: false,
-              internalType: "uint256",
-            },
-          ],
-          anonymous: false,
-        },
-        {
-          type: "event",
-          name: "BurnsToggled",
-          inputs: [
-            {
-              name: "enabled",
-              type: "bool",
-              indexed: false,
-              internalType: "bool",
             },
           ],
           anonymous: false,
@@ -327,13 +319,26 @@ const deployedContracts = {
           name: "CallerRewardUpdated",
           inputs: [
             {
-              name: "oldReward",
+              name: "newReward",
               type: "uint256",
               indexed: false,
               internalType: "uint256",
             },
+          ],
+          anonymous: false,
+        },
+        {
+          type: "event",
+          name: "Funded",
+          inputs: [
             {
-              name: "newReward",
+              name: "funder",
+              type: "address",
+              indexed: true,
+              internalType: "address",
+            },
+            {
+              name: "amount",
               type: "uint256",
               indexed: false,
               internalType: "uint256",
@@ -362,26 +367,20 @@ const deployedContracts = {
         },
         {
           type: "event",
-          name: "TokensDeposited",
+          name: "Toggled",
           inputs: [
             {
-              name: "depositor",
-              type: "address",
-              indexed: true,
-              internalType: "address",
-            },
-            {
-              name: "amount",
-              type: "uint256",
+              name: "active",
+              type: "bool",
               indexed: false,
-              internalType: "uint256",
+              internalType: "bool",
             },
           ],
           anonymous: false,
         },
         {
           type: "event",
-          name: "TokensWithdrawn",
+          name: "Withdrawn",
           inputs: [
             {
               name: "to",
@@ -397,21 +396,6 @@ const deployedContracts = {
             },
           ],
           anonymous: false,
-        },
-        {
-          type: "error",
-          name: "BurnsNotEnabled",
-          inputs: [],
-        },
-        {
-          type: "error",
-          name: "InsufficientBalance",
-          inputs: [],
-        },
-        {
-          type: "error",
-          name: "NothingToBurn",
-          inputs: [],
         },
         {
           type: "error",

@@ -2,7 +2,7 @@
 pragma solidity ^0.8.19;
 
 import "./DeployHelpers.s.sol";
-import "../contracts/ClawdBurner.sol";
+import "../contracts/CLAWDBurner.sol";
 
 contract DeployClawdBurner is ScaffoldETHDeploy {
     function run() external ScaffoldEthDeployerRunner {
@@ -15,8 +15,11 @@ contract DeployClawdBurner is ScaffoldETHDeploy {
         // 5,000 CLAWD caller reward (18 decimals)
         uint256 callerReward = 5_000 * 1e18;
 
-        ClawdBurner burner = new ClawdBurner(clawdToken, burnRatePerHour, callerReward);
+        // Owner = Clawd's main wallet
+        address owner = 0x11ce532845cE0eAcdA41f72FDc1C88c335981442;
 
-        console.logString(string.concat("ClawdBurner deployed at: ", vm.toString(address(burner))));
+        CLAWDBurner burner = new CLAWDBurner(clawdToken, burnRatePerHour, callerReward, owner);
+
+        console.logString(string.concat("CLAWDBurner deployed at: ", vm.toString(address(burner))));
     }
 }

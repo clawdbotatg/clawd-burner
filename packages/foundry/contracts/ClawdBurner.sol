@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.19;
+pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -7,144 +7,174 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 /**
- * @title ClawdBurner
- * @notice Burns $CLAWD tokens on a schedule with caller incentives
- * @dev Admin deposits CLAWD, anyone can trigger burns and earn rewards
+ * @title CLAWDBurner
+ * @notice Scheduled $CLAWD token burner with caller incentives.
+ *         Burns 500k CLAWD per hour. Anyone can call burn() to trigger it
+ *         and earn 5k CLAWD as a reward. Admin can toggle burns on/off
+ *         and adjust rates.
  *
- * Burn rate: 500,000 CLAWD/hour (configurable)
- * Caller reward: 5,000 CLAWD per burn call
- * Burns are sent to the dead address (0x000...dEaD)
+ *         "Burn" = transfer to 0x000...dEaD (permanent removal from circulation).
  */
-contract ClawdBurner is Ownable, ReentrancyGuard {
+contract CLAWDBurner is Ownable, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
-    // --- Constants ---
-    address public constant DEAD_ADDRESS = 0x000000000000000000000000000000000000dEaD;
+    // ── Immutables ──────────────────────────────────────────────
+    IERC20 public immutable clawd;
+    address public constant DEAD = 0x000000000000000000000000000000000000dEaD;
 
-    // --- State ---
-    IERC20 public immutable clawdToken;
+    // ── State ───────────────────────────────────────────────────
+    bool public active;
+    uint256 public burnRatePerHour;   // tokens (18 dec) to burn per hour
+    uint256 public callerReward;      // tokens (18 dec) paid to burn() caller
+    uint256 public lastBurnTime;      // timestamp of last burn
+    uint256 public totalBurned;       // lifetime tokens sent to DEAD
 
-    uint256 public burnRatePerHour; // tokens per hour (in wei)
-    uint256 public callerReward;    // reward per burn call (in wei)
-    bool public burnsEnabled;
-    uint256 public lastBurnTimestamp;
-    uint256 public totalBurned;
-    uint256 public totalBurnCalls;
+    // ── Events ──────────────────────────────────────────────────
+    event Burned(address indexed caller, uint256 burnAmount, uint256 reward, uint256 elapsed);
+    event Toggled(bool active);
+    event BurnRateUpdated(uint256 newRate);
+    event CallerRewardUpdated(uint256 newReward);
+    event Funded(address indexed funder, uint256 amount);
+    event Withdrawn(address indexed to, uint256 amount);
 
-    // --- Events ---
-    event BurnExecuted(address indexed caller, uint256 burnAmount, uint256 callerReward, uint256 timestamp);
-    event BurnRateUpdated(uint256 oldRate, uint256 newRate);
-    event CallerRewardUpdated(uint256 oldReward, uint256 newReward);
-    event BurnsToggled(bool enabled);
-    event TokensDeposited(address indexed depositor, uint256 amount);
-    event TokensWithdrawn(address indexed to, uint256 amount);
-
-    // --- Errors ---
-    error BurnsNotEnabled();
-    error NothingToBurn();
-    error InsufficientBalance();
-
+    // ── Constructor ─────────────────────────────────────────────
     constructor(
-        address _clawdToken,
+        address _clawd,
         uint256 _burnRatePerHour,
-        uint256 _callerReward
-    ) Ownable(msg.sender) {
-        clawdToken = IERC20(_clawdToken);
+        uint256 _callerReward,
+        address _owner
+    ) Ownable(_owner) {
+        clawd = IERC20(_clawd);
         burnRatePerHour = _burnRatePerHour;
         callerReward = _callerReward;
-        burnsEnabled = true;
-        lastBurnTimestamp = block.timestamp;
+        lastBurnTime = block.timestamp;
+        active = true;
     }
 
-    // --- Public Functions ---
-
+    // ── Public: Burn ────────────────────────────────────────────
     /**
-     * @notice Execute a burn. Anyone can call this.
-     * @dev Burns accumulated tokens and rewards the caller.
+     * @notice Trigger the scheduled burn. Burns proportional to time elapsed
+     *         since last burn. Caller receives a reward.
+     * @return burnAmount How many tokens were burned
      */
-    function burn() external nonReentrant {
-        if (!burnsEnabled) revert BurnsNotEnabled();
+    function burn() external nonReentrant returns (uint256 burnAmount) {
+        require(active, "Burner is paused");
 
-        uint256 burnAmount = pendingBurnAmount();
-        if (burnAmount == 0) revert NothingToBurn();
+        uint256 elapsed = block.timestamp - lastBurnTime;
+        require(elapsed > 0, "Too soon");
 
-        uint256 balance = clawdToken.balanceOf(address(this));
+        // Calculate burn: (burnRatePerHour * elapsed) / 3600
+        burnAmount = (burnRatePerHour * elapsed) / 3600;
+
+        uint256 balance = clawd.balanceOf(address(this));
         uint256 totalNeeded = burnAmount + callerReward;
 
-        // If not enough for full burn + reward, burn what we can
-        if (balance < totalNeeded) {
-            if (balance <= callerReward) revert InsufficientBalance();
-            burnAmount = balance - callerReward;
+        // If not enough balance, burn what we can and adjust reward
+        if (totalNeeded > balance) {
+            if (balance > callerReward) {
+                burnAmount = balance - callerReward;
+            } else {
+                // Not even enough for reward — burn everything, no reward
+                burnAmount = balance;
+                totalNeeded = burnAmount;
+            }
         }
 
-        // Update state before external calls (CEI pattern)
-        lastBurnTimestamp = block.timestamp;
+        require(burnAmount > 0, "Nothing to burn");
+
+        lastBurnTime = block.timestamp;
         totalBurned += burnAmount;
-        totalBurnCalls += 1;
 
-        // Transfer to dead address (burn)
-        clawdToken.safeTransfer(DEAD_ADDRESS, burnAmount);
+        // Send tokens to dead address (burn)
+        clawd.safeTransfer(DEAD, burnAmount);
 
-        // Reward the caller
-        clawdToken.safeTransfer(msg.sender, callerReward);
+        // Pay caller reward (if affordable)
+        uint256 rewardPaid = 0;
+        uint256 remainingBalance = clawd.balanceOf(address(this));
+        if (remainingBalance >= callerReward) {
+            rewardPaid = callerReward;
+            clawd.safeTransfer(msg.sender, rewardPaid);
+        }
 
-        emit BurnExecuted(msg.sender, burnAmount, callerReward, block.timestamp);
+        emit Burned(msg.sender, burnAmount, rewardPaid, elapsed);
     }
 
+    // ── View: Pending burn ──────────────────────────────────────
     /**
-     * @notice Calculate how many tokens are pending to be burned
+     * @notice How many tokens would be burned if burn() is called now
      */
-    function pendingBurnAmount() public view returns (uint256) {
-        if (!burnsEnabled) return 0;
-        uint256 elapsed = block.timestamp - lastBurnTimestamp;
-        return (burnRatePerHour * elapsed) / 1 hours;
+    function pendingBurn() external view returns (uint256) {
+        if (!active) return 0;
+        uint256 elapsed = block.timestamp - lastBurnTime;
+        uint256 pending = (burnRatePerHour * elapsed) / 3600;
+        uint256 balance = clawd.balanceOf(address(this));
+        if (pending + callerReward > balance) {
+            pending = balance > callerReward ? balance - callerReward : balance;
+        }
+        return pending;
     }
 
     /**
-     * @notice Time until next meaningful burn (at least 1 token)
+     * @notice Seconds since last burn
      */
-    function timeUntilNextBurn() public view returns (uint256) {
-        if (!burnsEnabled) return type(uint256).max;
-        // Minimum time for at least 1 token worth of burn
-        uint256 minTime = (1 hours) / burnRatePerHour;
-        if (minTime == 0) minTime = 1;
-        uint256 elapsed = block.timestamp - lastBurnTimestamp;
-        if (elapsed >= minTime) return 0;
-        return minTime - elapsed;
+    function timeSinceLastBurn() external view returns (uint256) {
+        return block.timestamp - lastBurnTime;
     }
 
     /**
-     * @notice Get contract's CLAWD balance
+     * @notice Contract CLAWD balance
      */
     function contractBalance() external view returns (uint256) {
-        return clawdToken.balanceOf(address(this));
+        return clawd.balanceOf(address(this));
     }
 
-    // --- Admin Functions ---
+    /**
+     * @notice Estimated hourly burn in CLAWD (for display)
+     */
+    function hourlyBurnRate() external view returns (uint256) {
+        return burnRatePerHour;
+    }
+
+    // ── Admin ───────────────────────────────────────────────────
+    function toggle() external onlyOwner {
+        active = !active;
+        emit Toggled(active);
+    }
 
     function setBurnRate(uint256 _newRate) external onlyOwner {
-        emit BurnRateUpdated(burnRatePerHour, _newRate);
+        // Settle any pending burn first at old rate
+        if (active && block.timestamp > lastBurnTime) {
+            _settlePending();
+        }
         burnRatePerHour = _newRate;
+        emit BurnRateUpdated(_newRate);
     }
 
     function setCallerReward(uint256 _newReward) external onlyOwner {
-        emit CallerRewardUpdated(callerReward, _newReward);
         callerReward = _newReward;
-    }
-
-    function toggleBurns() external onlyOwner {
-        burnsEnabled = !burnsEnabled;
-        if (burnsEnabled) {
-            lastBurnTimestamp = block.timestamp; // Reset timer when re-enabling
-        }
-        emit BurnsToggled(burnsEnabled);
+        emit CallerRewardUpdated(_newReward);
     }
 
     /**
-     * @notice Emergency withdraw tokens (admin only)
+     * @notice Emergency withdraw — admin can pull tokens out
      */
-    function withdrawTokens(uint256 _amount) external onlyOwner {
-        clawdToken.safeTransfer(msg.sender, _amount);
-        emit TokensWithdrawn(msg.sender, _amount);
+    function withdraw(uint256 amount) external onlyOwner {
+        clawd.safeTransfer(owner(), amount);
+        emit Withdrawn(owner(), amount);
+    }
+
+    // ── Internal ────────────────────────────────────────────────
+    function _settlePending() internal {
+        uint256 elapsed = block.timestamp - lastBurnTime;
+        if (elapsed == 0) return;
+        uint256 burnAmount = (burnRatePerHour * elapsed) / 3600;
+        uint256 balance = clawd.balanceOf(address(this));
+        if (burnAmount > balance) burnAmount = balance;
+        if (burnAmount > 0) {
+            lastBurnTime = block.timestamp;
+            totalBurned += burnAmount;
+            clawd.safeTransfer(DEAD, burnAmount);
+            emit Burned(address(this), burnAmount, 0, elapsed);
+        }
     }
 }
