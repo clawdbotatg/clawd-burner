@@ -9,6 +9,7 @@ import { useAccount, useChainId, useSwitchChain } from "wagmi";
 import { useScaffoldReadContract, useScaffoldWriteContract, useScaffoldEventHistory } from "~~/hooks/scaffold-eth";
 
 const CLAWD_TOKEN = "0x9f86dB9fc6f7c9408e8Fda3Ff8ce4e78ac7a6b07";
+const CLAWD_TOTAL_SUPPLY = 1_000_000_000n * 10n ** 18n; // 1 billion tokens
 
 const formatClawd = (value: bigint | undefined): string => {
   if (!value) return "0";
@@ -92,12 +93,13 @@ const Home: NextPage = () => {
   const wrongNetwork = chainId !== base.id;
   const hasPendingBurn = pendingBurn !== undefined && pendingBurn > 0n;
 
-  const clawdToUsd = (value: bigint | undefined): string => {
-    if (!value || clawdPrice === 0) return "";
-    const num = parseFloat(formatUnits(value, 18));
-    const usd = num * clawdPrice;
-    if (usd < 0.01) return "(< $0.01)";
-    return `(~$${usd.toFixed(2)})`;
+  const clawdToSupplyPercent = (value: bigint | undefined): string => {
+    if (!value) return "";
+    const percent = (Number(value) / Number(CLAWD_TOTAL_SUPPLY)) * 100;
+    if (percent < 0.001) return "(< 0.001% of supply)";
+    if (percent < 0.01) return `(${percent.toFixed(4)}% of supply)`;
+    if (percent < 1) return `(${percent.toFixed(3)}% of supply)`;
+    return `(${percent.toFixed(2)}% of supply)`;
   };
 
   const handleBurn = async () => {
@@ -133,7 +135,7 @@ const Home: NextPage = () => {
           </p>
           {totalBurned && clawdPrice > 0 && (
             <p className="text-sm opacity-50 mt-1">
-              {clawdToUsd(totalBurned)}
+              {clawdToSupplyPercent(totalBurned)}
             </p>
           )}
         </div>
@@ -144,21 +146,21 @@ const Home: NextPage = () => {
             <p className="text-xs opacity-60 uppercase tracking-wider">Burn Rate</p>
             <p className="text-xl font-bold">{formatClawd(burnRatePerHour)}/hr</p>
             {burnRatePerHour && clawdPrice > 0 && (
-              <p className="text-xs opacity-50">{clawdToUsd(burnRatePerHour)}</p>
+              <p className="text-xs opacity-50">{clawdToSupplyPercent(burnRatePerHour)}</p>
             )}
           </div>
           <div className="bg-base-200 rounded-2xl p-4 text-center">
             <p className="text-xs opacity-60 uppercase tracking-wider">Caller Reward</p>
             <p className="text-xl font-bold">{formatClawd(callerReward)}</p>
             {callerReward && clawdPrice > 0 && (
-              <p className="text-xs opacity-50">{clawdToUsd(callerReward)}</p>
+              <p className="text-xs opacity-50">{clawdToSupplyPercent(callerReward)}</p>
             )}
           </div>
           <div className="bg-base-200 rounded-2xl p-4 text-center">
             <p className="text-xs opacity-60 uppercase tracking-wider">Contract Balance</p>
             <p className="text-xl font-bold">{formatClawd(contractBalance)}</p>
             {contractBalance && clawdPrice > 0 && (
-              <p className="text-xs opacity-50">{clawdToUsd(contractBalance)}</p>
+              <p className="text-xs opacity-50">{clawdToSupplyPercent(contractBalance)}</p>
             )}
           </div>
           <div className="bg-base-200 rounded-2xl p-4 text-center">
@@ -184,7 +186,7 @@ const Home: NextPage = () => {
                   {formatClawdFull(pendingBurn)} CLAWD
                 </p>
                 {pendingBurn && clawdPrice > 0 && (
-                  <p className="text-xs opacity-50">{clawdToUsd(pendingBurn)}</p>
+                  <p className="text-xs opacity-50">{clawdToSupplyPercent(pendingBurn)}</p>
                 )}
                 {countdown > 0 && !hasPendingBurn && (
                   <p className="text-sm opacity-60 mt-2">
@@ -231,7 +233,7 @@ const Home: NextPage = () => {
 
             {callerReward && clawdPrice > 0 && connectedAddress && !wrongNetwork && (
               <p className="text-xs opacity-50">
-                You earn {formatClawd(callerReward)} CLAWD {clawdToUsd(callerReward)} for each burn call
+                You earn {formatClawd(callerReward)} CLAWD {clawdToSupplyPercent(callerReward)} for each burn call
               </p>
             )}
           </div>
