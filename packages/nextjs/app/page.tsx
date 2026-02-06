@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Address } from "~~/components/scaffold-eth";
+import { Address } from "@scaffold-ui/components";
 import type { NextPage } from "next";
 import { formatUnits } from "viem";
 import { useAccount } from "wagmi";

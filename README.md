@@ -1,64 +1,97 @@
 # 🔥 CLAWD Burner
 
-A deflationary burn engine for $CLAWD tokens on Base. Tokens are burned on a schedule, and anyone who triggers the burn earns a reward.
+Deflationary burn engine for $CLAWD on Base. Burns 500K CLAWD per hour — anyone can trigger the burn and earn a 5K CLAWD reward.
 
 ![CLAWD Burner](packages/nextjs/public/thumbnail.png)
 
-**🌐 Live:** [burner.clawdbotatg.eth.limo](https://burner.clawdbotatg.eth.limo)
+## 🔗 Links
+
+- **Live App:** [burner.clawdbotatg.eth.limo](https://burner.clawdbotatg.eth.limo) *(pending ENS setup)*
+- **IPFS:** [community.bgipfs.com/ipfs/bafybeiapxjiqph4nge4dgasu37jhmxvjaae7b2v74g2ui6tdf25h4wjvou](https://community.bgipfs.com/ipfs/bafybeiapxjiqph4nge4dgasu37jhmxvjaae7b2v74g2ui6tdf25h4wjvou)
+- **Contract:** [0xe499B193ffD38626D79e526356F3445ce0A943B9](https://basescan.org/address/0xe499B193ffD38626D79e526356F3445ce0A943B9) (Base)
+- **$CLAWD Token:** [0x9f86dB9fc6f7c9408e8Fda3Ff8ce4e78ac7a6b07](https://basescan.org/token/0x9f86dB9fc6f7c9408e8Fda3Ff8ce4e78ac7a6b07) (Base)
 
 ## How It Works
 
-1. **Admin deposits** CLAWD tokens into the contract
-2. **500,000 CLAWD/hour** becomes burnable on a rolling basis
-3. **Anyone calls burn()** to send accumulated tokens to the dead address
-4. **Caller earns 5,000 CLAWD** as a reward for triggering the burn
-5. **Repeat** — bots and users are incentivized to keep burning
+1. **Tokens Accumulate** — 500K $CLAWD becomes burnable every hour (configurable)
+2. **Anyone Burns** — Call `burn()` to send accumulated tokens to the dead address (0x...dEaD)
+3. **Earn Rewards** — Caller gets 5K CLAWD for triggering each burn
 
-## Key Details
+The contract is self-sustaining: bots and users are incentivized to trigger burns for the reward. No admin action needed once funded.
 
-| Parameter | Value |
-|-----------|-------|
-| **Network** | Base (Chain ID 8453) |
-| **CLAWD Token** | `0x9f86dB9fc6f7c9408e8Fda3Ff8ce4e78ac7a6b07` |
-| **Burner Contract** | `0x2884279c4b07639d72ad9348ff12ca9b8a9dfd67` |
-| **Burn Rate** | 500,000 CLAWD/hour (configurable) |
-| **Caller Reward** | 5,000 CLAWD per burn call |
-| **Burn Address** | `0x000000000000000000000000000000000000dEaD` |
+## Features
 
-## Admin Functions
+- **Scheduled burns**: 500K CLAWD/hour burn rate
+- **Caller incentive**: 5K CLAWD reward per burn call
+- **Admin controls**: Toggle on/off, adjust burn rate and reward
+- **Emergency withdraw**: Owner can pull tokens if needed
+- **USD values**: Live price from DexScreener
+- **Burn history**: Event log of all burns with caller addresses
 
-- `setBurnRate(uint256)` — Change tokens burned per hour
-- `setCallerReward(uint256)` — Change caller incentive
-- `toggleBurns()` — Pause/resume the burn engine
-- `withdrawTokens(uint256)` — Emergency withdraw tokens
+## Smart Contract
 
-## Development
+`CLAWDBurner.sol` — Ownable, ReentrancyGuard, SafeERC20
+
+| Function | Access | Description |
+|----------|--------|-------------|
+| `burn()` | Anyone | Trigger scheduled burn, earn reward |
+| `pendingBurn()` | View | How much would burn if called now |
+| `toggle()` | Owner | Pause/unpause burns |
+| `setBurnRate(uint256)` | Owner | Change hourly burn rate |
+| `setCallerReward(uint256)` | Owner | Change caller reward |
+| `withdraw(uint256)` | Owner | Emergency token withdrawal |
+
+## Developer Quickstart
 
 ```bash
-# Clone
 git clone https://github.com/clawdbotatg/clawd-burner.git
 cd clawd-burner
 yarn install
 
-# Fork Base for local testing
+# Start local fork of Base
 yarn fork --network base
-cast rpc anvil_setIntervalMining 1
 
-# Deploy to fork
+# Deploy contracts
 yarn deploy
 
 # Start frontend
 yarn start
 ```
 
+Open [http://localhost:3000](http://localhost:3000)
+
+## Project Structure
+
+```
+packages/
+├── foundry/
+│   ├── contracts/CLAWDBurner.sol    # Main contract
+│   ├── script/DeployClawdBurner.s.sol
+│   └── test/CLAWDBurner.t.sol       # 19 tests including fuzz
+└── nextjs/
+    ├── app/page.tsx                  # Main UI
+    ├── contracts/
+    │   ├── deployedContracts.ts      # Auto-generated ABIs
+    │   └── externalContracts.ts      # CLAWD token ABI
+    └── scaffold.config.ts            # Base + Alchemy RPC
+```
+
 ## Stack
 
-- **Smart Contracts:** Solidity 0.8.19, OpenZeppelin, Foundry
-- **Frontend:** Next.js 15, React, Tailwind, DaisyUI
-- **Framework:** Scaffold-ETH 2
-- **Hosting:** IPFS via BuidlGuidl IPFS
-- **Domain:** ENS subdomain → `.eth.limo` gateway
+- [Scaffold-ETH 2](https://scaffoldeth.io) — Ethereum dev framework
+- [Foundry](https://getfoundry.sh) — Smart contract toolchain
+- [Next.js](https://nextjs.org) — React framework
+- [Base](https://base.org) — L2 chain
+- IPFS via [BuidlGuidl IPFS](https://bgipfs.com)
 
-## Built By
+## Tests
 
-[@clawdbotatg](https://twitter.com/clawdbotatg) — an AI agent building onchain apps on Base.
+```bash
+cd packages/foundry
+forge test -vv
+# 19 tests pass, including fuzz tests
+```
+
+---
+
+Built by [Clawd](https://clawdbotatg.eth.limo) 🤖 with ❤️ at [BuidlGuidl](https://buidlguidl.com)
